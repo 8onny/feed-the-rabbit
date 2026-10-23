@@ -6,6 +6,8 @@
   <title>ODACUIR FEED ME WITH A COIN A DAY</title>
   <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Solana Web3.js SDK -->
+  <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
@@ -130,7 +132,6 @@
       cursor: not-allowed;
     }
 
-    /* 30-Day Special Airdrop Button */
     .airdrop-btn {
       background-color: #ffffff;
       color: #000000;
@@ -193,7 +194,7 @@
       margin-bottom: 4px;
     }
 
-    input, select {
+    input {
       width: 100%;
       font-family: 'Press Start 2P', monospace;
       font-size: 8px;
@@ -228,13 +229,12 @@
     <div class="controls">
       <button id="feed-btn" onclick="tryFeed()">[ FEED PET ]</button>
       
-      <!-- 30-Day Airdrop Button -->
       <button id="airdrop-claim-btn" class="airdrop-btn hidden" onclick="openAirdropModal()">
         [ 🎉 CLAIM $5 AIRDROP ]
       </button>
 
       <button id="share-btn" onclick="generateAndShareCard()">[ SHARE CARD ]</button>
-      <button onclick="openConfigModal()">[ CONFIG ]</button>
+      <button onclick="openConfigModal()">[ CONFIG WALLET ]</button>
     </div>
   </div>
 
@@ -244,13 +244,14 @@
       <div class="modal-title">=== GAME RULES ===</div>
       <div class="info-text">
         1. Feed the bunny once every day, or it will be very sad.<br>
-        2. Proof of holding specified Pump.fun tokens is required to feed.<br>
-        3. Today is Day <span id="modal-day-count" style="text-decoration: underline;">1</span> of your feeding streak.<br>
-        4. 🎁 <b>Reach a 30-day streak to unlock a random ODACUIR memecoin airdrop worth $5 USDC! (Limited to 3 slots/month, First-Come First-Served)</b>
+        2. Must hold <b>$ODACUIR</b> token to feed.<br>
+        3. CA: <span style="font-size: 5.5px; word-break: break-all;">3AkbtbeBp1XJC9VETMENredtYztPMfNT4w7Ej8HEpump</span><br>
+        4. Today is Day <span id="modal-day-count" style="text-decoration: underline;">1</span> of your feeding streak.<br>
+        5. 🎁 <b>Reach a 30-day streak for a $5 USDC random ODACUIR memecoin airdrop! (Limited to 3 slots/month)</b>
       </div>
       
       <div class="warning-text">
-        ⚠️ This game consumes ZERO real tokens. It is purely for 8-bit entertainment and reward purposes.
+        ⚠️ This game consumes ZERO tokens. Real-time Solana RPC will verify if your wallet holds > 0 $ODACUIR.
       </div>
 
       <form id="config-form" onsubmit="saveConfig(event)">
@@ -260,18 +261,11 @@
         </div>
 
         <div>
-          <label>SELECT TOKEN MINT:</label>
-          <select id="token-select">
-            <option value="">Loading Creator Tokens...</option>
-          </select>
+          <label>SOLANA WALLET ADDRESS:</label>
+          <input type="text" id="input-wallet" placeholder="Enter your Solana Wallet Address" required>
         </div>
 
-        <div>
-          <label>HOLDING PROOF (TX/ADDR):</label>
-          <input type="text" id="input-proof" placeholder="Enter holding/wallet proof" required>
-        </div>
-
-        <button type="submit" style="width: 100%; margin-top: 8px;">[ START GAME ]</button>
+        <button type="submit" style="width: 100%; margin-top: 8px;">[ VERIFY & SAVE ]</button>
       </form>
     </div>
   </div>
@@ -287,7 +281,7 @@
       </div>
 
       <div class="warning-text">
-        * Please enter your Solana wallet address below. We will verify your streak and holding records before distributing the airdrop.
+        * Enter your Solana wallet address below. Streak and holding records will be verified.
       </div>
 
       <form onsubmit="submitAirdropClaim(event)">
@@ -307,19 +301,15 @@
     const tg = window.Telegram?.WebApp;
     if (tg) { tg.ready(); tg.expand(); }
 
-    const CREATOR_WALLETS = [
-      "CoYAvV4n95efCLKMfvbiY6cPZAmARH1qcCxKZ9y3q34C",
-      "3s1k7cQSe11wQvYmaBiMvjqHFCbZW4dKoNeQ8i7NCvCc"
-    ];
-
-    // Google Form or Claim Verification Link
+    // Target Contract Address (CA) & RPC
+    const TARGET_CA = "3AkbtbeBp1XJC9VETMENredtYztPMfNT4w7Ej8HEpump";
+    const RPC_ENDPOINT = "https://rpc.ankr.com/solana"; // Public Solana RPC
     const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/YOUR_FORM_ID/viewform";
 
     let streak = parseInt(localStorage.getItem('odacuir_streak') || '0');
     let lastFedTimestamp = parseInt(localStorage.getItem('odacuir_last_fed') || '0');
     let playerHandle = localStorage.getItem('odacuir_handle') || '';
-    let selectedToken = localStorage.getItem('odacuir_token') || '$ODACUIR';
-    let proofData = localStorage.getItem('odacuir_proof') || '';
+    let playerWallet = localStorage.getItem('odacuir_wallet') || '';
 
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     function playBeep(freq, type = 'square', duration = 0.15) {
@@ -341,43 +331,14 @@
         playerHandle = tg.initDataUnsafe.user.username ? `@${tg.initDataUnsafe.user.username}` : tg.initDataUnsafe.user.first_name;
       }
       document.getElementById('input-handle').value = playerHandle || '@Player';
-      document.getElementById('input-proof').value = proofData;
+      document.getElementById('input-wallet').value = playerWallet;
       
-      fetchCreatorTokens();
       checkCooldown();
       updateUI();
       
-      if (!proofData) openConfigModal();
+      if (!playerWallet) openConfigModal();
       else closeConfigModal();
     });
-
-    async function fetchCreatorTokens() {
-      const selectEl = document.getElementById('token-select');
-      try {
-        const requests = CREATOR_WALLETS.map(w => 
-          fetch(`https://frontend-api.pump.fun/coins/user/${w}?limit=20&offset=0`)
-            .then(r => r.ok ? r.json() : [])
-            .catch(() => [])
-        );
-        const results = await Promise.all(requests);
-        const tokensList = results.flat();
-
-        selectEl.innerHTML = '';
-        if (tokensList.length === 0) {
-          selectEl.innerHTML = `<option value="$ODACUIR">$ODACUIR (Default)</option>`;
-        } else {
-          tokensList.forEach(t => {
-            const opt = document.createElement('option');
-            opt.value = t.symbol || t.name;
-            opt.innerText = `$${t.symbol} (${t.mint.substring(0,6)}...)`;
-            selectEl.appendChild(opt);
-          });
-        }
-        if (selectedToken) selectEl.value = selectedToken;
-      } catch (e) {
-        selectEl.innerHTML = `<option value="$ODACUIR">$ODACUIR (Default)</option>`;
-      }
-    }
 
     function openConfigModal() {
       document.getElementById('modal-day-count').innerText = streak + 1;
@@ -398,17 +359,48 @@
 
     function saveConfig(e) {
       e.preventDefault();
-      playerHandle = document.getElementById('input-handle').value;
-      proofData = document.getElementById('input-proof').value;
-      selectedToken = document.getElementById('token-select').value || '$ODACUIR';
+      playerHandle = document.getElementById('input-handle').value.trim();
+      playerWallet = document.getElementById('input-wallet').value.trim();
+
+      // Basic Solana Address Validation
+      if (!playerWallet || playerWallet.length < 32 || playerWallet.length > 44) {
+        alert("Invalid Solana wallet address!");
+        return;
+      }
 
       localStorage.setItem('odacuir_handle', playerHandle);
-      localStorage.setItem('odacuir_proof', proofData);
-      localStorage.setItem('odacuir_token', selectedToken);
+      localStorage.setItem('odacuir_wallet', playerWallet);
 
       playBeep(440);
       closeConfigModal();
       updateUI();
+    }
+
+    // On-Chain Balance Verification Function (RPC Call)
+    async function verifyTokenHolding(walletAddress) {
+      try {
+        const connection = new solanaWeb3.Connection(RPC_ENDPOINT, 'confirmed');
+        const ownerPublicKey = new solanaWeb3.PublicKey(walletAddress);
+        const mintPublicKey = new solanaWeb3.PublicKey(TARGET_CA);
+
+        const response = await connection.getParsedTokenAccountsByOwner(ownerPublicKey, {
+          mint: mintPublicKey
+        });
+
+        if (response.value.length === 0) return 0;
+
+        let totalBalance = 0;
+        response.value.forEach(accountInfo => {
+          const amount = accountInfo.account.data.parsed.info.tokenAmount.uiAmount;
+          totalBalance += amount;
+        });
+
+        return totalBalance;
+      } catch (error) {
+        console.error("RPC Verification Error:", error);
+        // Fallback: If public RPC fails/rate-limits, prompt user
+        return null;
+      }
     }
 
     function isCooldownActive() {
@@ -427,9 +419,36 @@
       }
     }
 
-    function tryFeed() {
+    async function tryFeed() {
       if (isCooldownActive()) return;
 
+      if (!playerWallet) {
+        alert("Please set your Solana wallet address first!");
+        openConfigModal();
+        return;
+      }
+
+      const feedBtn = document.getElementById('feed-btn');
+      feedBtn.innerText = "[ VERIFYING... ]";
+      feedBtn.disabled = true;
+
+      // On-chain check
+      const tokenBalance = await verifyTokenHolding(playerWallet);
+
+      if (tokenBalance === null) {
+        alert("RPC connection busy. Please try again in a few seconds.");
+        checkCooldown();
+        return;
+      }
+
+      if (tokenBalance <= 0) {
+        playBeep(150, 'sawtooth', 0.3); // Sad error beep
+        alert(`VERIFICATION FAILED!\n\nWallet: ${playerWallet.substring(0, 6)}...${playerWallet.slice(-4)}\nDoes NOT hold token CA: ${TARGET_CA.substring(0, 6)}...\n\nYou cannot feed the bunny!`);
+        checkCooldown();
+        return;
+      }
+
+      // Success
       streak += 1;
       lastFedTimestamp = Date.now();
 
@@ -483,96 +502,4 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       const isHappy = isCooldownActive();
-      const bounce = isHappy ? Math.sin(animFrame * 0.1) * 4 : 0;
-      
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
-
-      const WHITE = '#ffffff', GRAY = '#666666', BLACK = '#000000';
-      const cx = 125, cy = 130 + bounce;
-
-      // Ears
-      ctx.fillStyle = WHITE;
-      ctx.fillRect(cx - 35, cy - 80, 20, 50);
-      ctx.fillRect(cx + 15, cy - 80, 20, 50);
-      ctx.fillStyle = GRAY;
-      ctx.fillRect(cx - 30, cy - 75, 10, 40);
-      ctx.fillRect(cx + 20, cy - 75, 10, 40);
-
-      // Body & Head
-      ctx.fillStyle = WHITE;
-      ctx.fillRect(cx - 45, cy - 35, 90, 70);
-      ctx.fillRect(cx - 55, cy + 20, 110, 60);
-
-      // Eyes
-      ctx.fillStyle = BLACK;
-      ctx.fillRect(cx - 25, cy - 15, 12, 12);
-      ctx.fillRect(cx + 13, cy - 15, 12, 12);
-
-      if (!isHappy) {
-        ctx.fillStyle = WHITE;
-        const tearY = cy + (animFrame * 2) % 30;
-        ctx.fillRect(cx - 23, cy + 5 + tearY, 4, 6);
-        ctx.fillRect(cx + 17, cy + 5 + tearY, 4, 6);
-      }
-
-      ctx.fillStyle = BLACK;
-      if (isEating) ctx.fillRect(cx - 10, cy + 5, 20, 15);
-      else if (isHappy) ctx.fillRect(cx - 8, cy + 8, 16, 4);
-      else ctx.fillRect(cx - 8, cy + 12, 16, 3);
-
-      if (isEating) {
-        ctx.fillStyle = WHITE;
-        ctx.fillRect(cx - 10, cy - 40 - bounce, 20, 20);
-        ctx.fillStyle = BLACK;
-        ctx.font = '10px "Press Start 2P"';
-        ctx.fillText('C', cx - 4, cy - 26 - bounce);
-      }
-
-      animFrame++;
-      requestAnimationFrame(drawPixelBunny);
-    }
-
-    function triggerEatAnimation() {
-      isEating = true;
-      setTimeout(() => { isEating = false; }, 1500);
-    }
-
-    drawPixelBunny();
-
-    function generateAndShareCard() {
-      const shareCanvas = document.createElement('canvas');
-      shareCanvas.width = 600; shareCanvas.height = 400;
-      const sCtx = shareCanvas.getContext('2d');
-
-      sCtx.fillStyle = '#000000'; sCtx.fillRect(0, 0, 600, 400);
-      sCtx.strokeStyle = '#ffffff'; sCtx.lineWidth = 6; sCtx.strokeRect(10, 10, 580, 380);
-
-      sCtx.fillStyle = '#ffffff';
-      sCtx.font = '16px "Press Start 2P"';
-      sCtx.fillText('ODACUIR FEED ME', 30, 50);
-
-      sCtx.font = '10px "Press Start 2P"';
-      sCtx.fillStyle = '#aaaaaa';
-      sCtx.fillText(`PLAYER: ${playerHandle}`, 30, 90);
-      sCtx.fillText(`TOKEN: ${selectedToken}`, 30, 120);
-      sCtx.fillText(`STREAK: ${streak}/30 DAYS`, 30, 150);
-      sCtx.fillText(`STATUS: ${isCooldownActive() ? 'HAPPY & FED' : 'HUNGRY'}`, 30, 180);
-
-      sCtx.font = '8px "Press Start 2P"';
-      sCtx.fillText(`PROOF: ${proofData.substring(0, 20)}...`, 30, 220);
-      sCtx.fillText(`TIME: ${new Date().toISOString().slice(0, 10)}`, 30, 250);
-
-      sCtx.fillStyle = '#666666';
-      sCtx.fillText('0 TOKEN CONSUMPTION - 30D AIRDROP (3 SLOTS/MO)', 30, 350);
-
-      const dataUrl = shareCanvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.download = `ODACUIR_DAY_${streak}.png`;
-      link.href = dataUrl;
-      link.click();
-    }
-  </script>
-</body>
-</html>
+      const bounce = isHappy ? Math.sin(animFrame * 0.
