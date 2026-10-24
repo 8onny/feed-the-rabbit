@@ -258,6 +258,7 @@
         <div>
           <label>PLAYER HANDLE (TG):</label>
           <input type="text" id="input-handle" placeholder="@username" required>
+          <button type="button" onclick="detectTGUser()" style="font-size:6px; padding:4px; margin-bottom:8px; width:100%;">[ 🔄 DETECT TG HANDLE ]</button>
         </div>
 
         <div>
@@ -297,19 +298,32 @@
   </div>
 
   <script>
-    // Telegram SDK
-    const tg = window.Telegram?.WebApp;
-    if (tg) { tg.ready(); tg.expand(); }
-
     // Target Contract Address (CA) & RPC
     const TARGET_CA = "3AkbtbeBp1XJC9VETMENredtYztPMfNT4w7Ej8HEpump";
-    const RPC_ENDPOINT = "https://rpc.ankr.com/solana"; // Public Solana RPC
+    const RPC_ENDPOINT = "https://rpc.ankr.com/solana"; 
     const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/YOUR_FORM_ID/viewform";
 
     let streak = parseInt(localStorage.getItem('odacuir_streak') || '0');
     let lastFedTimestamp = parseInt(localStorage.getItem('odacuir_last_fed') || '0');
     let playerHandle = localStorage.getItem('odacuir_handle') || '';
     let playerWallet = localStorage.getItem('odacuir_wallet') || '';
+
+    // Safe Telegram User Detection
+    function detectTGUser() {
+      const tg = window.Telegram?.WebApp;
+      if (tg) {
+        tg.ready();
+        tg.expand();
+        const user = tg.initDataUnsafe?.user;
+        if (user) {
+          playerHandle = user.username ? `@${user.username}` : `${user.first_name || 'Player'}`;
+          document.getElementById('input-handle').value = playerHandle;
+          localStorage.setItem('odacuir_handle', playerHandle);
+          return true;
+        }
+      }
+      return false;
+    }
 
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     function playBeep(freq, type = 'square', duration = 0.15) {
@@ -327,179 +341,4 @@
     }
 
     window.addEventListener('DOMContentLoaded', () => {
-      if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
-        playerHandle = tg.initDataUnsafe.user.username ? `@${tg.initDataUnsafe.user.username}` : tg.initDataUnsafe.user.first_name;
-      }
-      document.getElementById('input-handle').value = playerHandle || '@Player';
-      document.getElementById('input-wallet').value = playerWallet;
-      
-      checkCooldown();
-      updateUI();
-      
-      if (!playerWallet) openConfigModal();
-      else closeConfigModal();
-    });
-
-    function openConfigModal() {
-      document.getElementById('modal-day-count').innerText = streak + 1;
-      document.getElementById('config-modal').classList.remove('hidden');
-    }
-
-    function closeConfigModal() {
-      document.getElementById('config-modal').classList.add('hidden');
-    }
-
-    function openAirdropModal() {
-      document.getElementById('airdrop-modal').classList.remove('hidden');
-    }
-
-    function closeAirdropModal() {
-      document.getElementById('airdrop-modal').classList.add('hidden');
-    }
-
-    function saveConfig(e) {
-      e.preventDefault();
-      playerHandle = document.getElementById('input-handle').value.trim();
-      playerWallet = document.getElementById('input-wallet').value.trim();
-
-      // Basic Solana Address Validation
-      if (!playerWallet || playerWallet.length < 32 || playerWallet.length > 44) {
-        alert("Invalid Solana wallet address!");
-        return;
-      }
-
-      localStorage.setItem('odacuir_handle', playerHandle);
-      localStorage.setItem('odacuir_wallet', playerWallet);
-
-      playBeep(440);
-      closeConfigModal();
-      updateUI();
-    }
-
-    // On-Chain Balance Verification Function (RPC Call)
-    async function verifyTokenHolding(walletAddress) {
-      try {
-        const connection = new solanaWeb3.Connection(RPC_ENDPOINT, 'confirmed');
-        const ownerPublicKey = new solanaWeb3.PublicKey(walletAddress);
-        const mintPublicKey = new solanaWeb3.PublicKey(TARGET_CA);
-
-        const response = await connection.getParsedTokenAccountsByOwner(ownerPublicKey, {
-          mint: mintPublicKey
-        });
-
-        if (response.value.length === 0) return 0;
-
-        let totalBalance = 0;
-        response.value.forEach(accountInfo => {
-          const amount = accountInfo.account.data.parsed.info.tokenAmount.uiAmount;
-          totalBalance += amount;
-        });
-
-        return totalBalance;
-      } catch (error) {
-        console.error("RPC Verification Error:", error);
-        // Fallback: If public RPC fails/rate-limits, prompt user
-        return null;
-      }
-    }
-
-    function isCooldownActive() {
-      const now = Date.now();
-      return (now - lastFedTimestamp) < (24 * 60 * 60 * 1000);
-    }
-
-    function checkCooldown() {
-      const feedBtn = document.getElementById('feed-btn');
-      if (isCooldownActive()) {
-        feedBtn.disabled = true;
-        feedBtn.innerText = "[ ALREADY FED ]";
-      } else {
-        feedBtn.disabled = false;
-        feedBtn.innerText = "[ FEED PET ]";
-      }
-    }
-
-    async function tryFeed() {
-      if (isCooldownActive()) return;
-
-      if (!playerWallet) {
-        alert("Please set your Solana wallet address first!");
-        openConfigModal();
-        return;
-      }
-
-      const feedBtn = document.getElementById('feed-btn');
-      feedBtn.innerText = "[ VERIFYING... ]";
-      feedBtn.disabled = true;
-
-      // On-chain check
-      const tokenBalance = await verifyTokenHolding(playerWallet);
-
-      if (tokenBalance === null) {
-        alert("RPC connection busy. Please try again in a few seconds.");
-        checkCooldown();
-        return;
-      }
-
-      if (tokenBalance <= 0) {
-        playBeep(150, 'sawtooth', 0.3); // Sad error beep
-        alert(`VERIFICATION FAILED!\n\nWallet: ${playerWallet.substring(0, 6)}...${playerWallet.slice(-4)}\nDoes NOT hold token CA: ${TARGET_CA.substring(0, 6)}...\n\nYou cannot feed the bunny!`);
-        checkCooldown();
-        return;
-      }
-
-      // Success
-      streak += 1;
-      lastFedTimestamp = Date.now();
-
-      localStorage.setItem('odacuir_streak', streak);
-      localStorage.setItem('odacuir_last_fed', lastFedTimestamp);
-
-      playBeep(587, 'square', 0.1);
-      setTimeout(() => playBeep(880, 'square', 0.2), 120);
-
-      checkCooldown();
-      updateUI();
-      triggerEatAnimation();
-    }
-
-    function updateUI() {
-      document.getElementById('streak-count').innerText = streak;
-      document.getElementById('pet-status').innerText = isCooldownActive() ? "HAPPY" : "SAD";
-
-      const airdropBtn = document.getElementById('airdrop-claim-btn');
-      if (streak >= 30) {
-        airdropBtn.classList.remove('hidden');
-      } else {
-        airdropBtn.classList.add('hidden');
-      }
-    }
-
-    function submitAirdropClaim(e) {
-      e.preventDefault();
-      const wallet = document.getElementById('airdrop-wallet').value;
-      
-      if (tg && tg.showPopup) {
-        tg.showPopup({
-          title: 'Claim Submitted!',
-          message: `Your wallet: ${wallet} has been recorded. Redirecting to verification...`,
-          buttons: [{ type: 'ok' }]
-        });
-      }
-
-      const prefillUrl = `${GOOGLE_FORM_URL}?entry.123456=${encodeURIComponent(playerHandle)}&entry.789012=${encodeURIComponent(wallet)}`;
-      window.open(prefillUrl, '_blank');
-      closeAirdropModal();
-    }
-
-    // Canvas Rendering
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    let animFrame = 0, isEating = false;
-
-    function drawPixelBunny() {
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      const isHappy = isCooldownActive();
-      const bounce = isHappy ? Math.sin(animFrame * 0.
+      // 嘗試立刻讀取，如果不
