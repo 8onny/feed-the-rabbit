@@ -6,8 +6,6 @@
   <title>ODACUIR FEED ME WITH A COIN A DAY</title>
   <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <!-- Solana Web3.js SDK -->
-  <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
@@ -234,7 +232,7 @@
       </button>
 
       <button id="share-btn" onclick="generateAndShareCard()">[ SHARE CARD ]</button>
-      <button onclick="openConfigModal()">[ CONFIG WALLET ]</button>
+      <button onclick="openConfigModal()">[ CONFIG PLAYER ]</button>
     </div>
   </div>
 
@@ -244,14 +242,13 @@
       <div class="modal-title">=== GAME RULES ===</div>
       <div class="info-text">
         1. Feed the bunny once every day, or it will be very sad.<br>
-        2. Must hold <b>$ODACUIR</b> token to feed.<br>
-        3. CA: <span style="font-size: 5.5px; word-break: break-all;">3AkbtbeBp1XJC9VETMENredtYztPMfNT4w7Ej8HEpump</span><br>
-        4. Today is Day <span id="modal-day-count" style="text-decoration: underline;">1</span> of your feeding streak.<br>
-        5. 🎁 <b>Reach a 30-day streak for a $5 USDC random ODACUIR memecoin airdrop! (Limited to 3 slots/month)</b>
+        2. Today is Day <span id="modal-day-count" style="text-decoration: underline;">1</span> of your feeding streak.<br>
+        3. 🎁 <b>Reach a 30-day streak to unlock a random ODACUIR memecoin airdrop worth $5 USDC! (Limited to 3 slots/month)</b><br>
+        4. Holding proof screenshot is required when claiming the 30-day airdrop.
       </div>
       
       <div class="warning-text">
-        ⚠️ This game consumes ZERO tokens. Real-time Solana RPC will verify if your wallet holds > 0 $ODACUIR.
+        ⚠️ This game consumes ZERO real tokens. It is purely for 8-bit entertainment and reward purposes.
       </div>
 
       <form id="config-form" onsubmit="saveConfig(event)">
@@ -261,12 +258,7 @@
           <button type="button" onclick="detectTGUser()" style="font-size:6px; padding:4px; margin-bottom:8px; width:100%;">[ 🔄 DETECT TG HANDLE ]</button>
         </div>
 
-        <div>
-          <label>SOLANA WALLET ADDRESS:</label>
-          <input type="text" id="input-wallet" placeholder="Enter your Solana Wallet Address" required>
-        </div>
-
-        <button type="submit" style="width: 100%; margin-top: 8px;">[ VERIFY & SAVE ]</button>
+        <button type="submit" style="width: 100%; margin-top: 8px;">[ SAVE & START ]</button>
       </form>
     </div>
   </div>
@@ -282,7 +274,7 @@
       </div>
 
       <div class="warning-text">
-        * Enter your Solana wallet address below. Streak and holding records will be verified.
+        * Please submit your Solana wallet address and provide holding proof screenshot in the claim form.
       </div>
 
       <form onsubmit="submitAirdropClaim(event)">
@@ -291,54 +283,15 @@
           <input type="text" id="airdrop-wallet" placeholder="Enter Solana Wallet Address" required>
         </div>
 
-        <button type="submit" style="width: 100%; margin-top: 8px;">[ CLAIM AIRDROP ]</button>
+        <button type="submit" style="width: 100%; margin-top: 8px;">[ GO TO CLAIM FORM ]</button>
         <button type="button" onclick="closeAirdropModal()" style="width: 100%; margin-top: 4px; background:#333;">[ CLOSE ]</button>
       </form>
     </div>
   </div>
 
   <script>
-    // Target Contract Address (CA) & RPC
     const TARGET_CA = "3AkbtbeBp1XJC9VETMENredtYztPMfNT4w7Ej8HEpump";
-    const RPC_ENDPOINT = "https://rpc.ankr.com/solana"; 
+    // 請將下方網址替換為您的 Google Form 表單連結
     const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/YOUR_FORM_ID/viewform";
 
-    let streak = parseInt(localStorage.getItem('odacuir_streak') || '0');
-    let lastFedTimestamp = parseInt(localStorage.getItem('odacuir_last_fed') || '0');
-    let playerHandle = localStorage.getItem('odacuir_handle') || '';
-    let playerWallet = localStorage.getItem('odacuir_wallet') || '';
-
-    // Safe Telegram User Detection
-    function detectTGUser() {
-      const tg = window.Telegram?.WebApp;
-      if (tg) {
-        tg.ready();
-        tg.expand();
-        const user = tg.initDataUnsafe?.user;
-        if (user) {
-          playerHandle = user.username ? `@${user.username}` : `${user.first_name || 'Player'}`;
-          document.getElementById('input-handle').value = playerHandle;
-          localStorage.setItem('odacuir_handle', playerHandle);
-          return true;
-        }
-      }
-      return false;
-    }
-
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    function playBeep(freq, type = 'square', duration = 0.15) {
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + duration);
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      // 嘗試立刻讀取，如果不
+    let streak = parseInt(localStorage.getItem('od
