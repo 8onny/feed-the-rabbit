@@ -297,7 +297,6 @@
     let lastFedTimestamp = parseInt(localStorage.getItem('odacuir_last_fed') || '0');
     let playerHandle = localStorage.getItem('odacuir_handle') || '';
 
-    // 安全提示彈窗函數
     function showNotification(msg) {
       const tg = window.Telegram?.WebApp;
       if (tg && tg.showAlert) {
@@ -520,37 +519,31 @@
 
     drawPixelBunny();
 
+    // 修復後且支援 Telegram 的分享圖卡生成器
     function generateAndShareCard() {
-      const shareCanvas = document.createElement('canvas');
-      shareCanvas.width = 600; shareCanvas.height = 400;
-      const sCtx = shareCanvas.getContext('2d');
+      try {
+        const shareCanvas = document.createElement('canvas');
+        shareCanvas.width = 600; 
+        shareCanvas.height = 400;
+        const sCtx = shareCanvas.getContext('2d');
 
-      sCtx.fillStyle = '#000000'; sCtx.fillRect(0, 0, 600, 400);
-      sCtx.strokeStyle = '#ffffff'; sCtx.lineWidth = 6; sCtx.strokeRect(10, 10, 580, 380);
+        // 背景與邊框
+        sCtx.fillStyle = '#000000'; 
+        sCtx.fillRect(0, 0, 600, 400);
+        sCtx.strokeStyle = '#ffffff'; 
+        sCtx.lineWidth = 6; 
+        sCtx.strokeRect(10, 10, 580, 380);
 
-      sCtx.fillStyle = '#ffffff';
-      sCtx.font = '16px "Press Start 2P"';
-      sCtx.fillText('ODACUIR FEED ME', 30, 50);
+        // 文字內容
+        sCtx.fillStyle = '#ffffff';
+        sCtx.font = '16px "Press Start 2P"';
+        sCtx.fillText('ODACUIR FEED ME', 30, 50);
 
-      sCtx.font = '10px "Press Start 2P"';
-      sCtx.fillStyle = '#aaaaaa';
-      sCtx.fillText(`PLAYER: ${playerHandle}`, 30, 90);
-      sCtx.fillText(`TOKEN: $ODACUIR`, 30, 120);
-      sCtx.fillText(`STREAK: ${streak}/30 DAYS`, 30, 150);
-      sCtx.fillText(`STATUS: ${isCooldownActive() ? 'HAPPY & FED' : 'HUNGRY'}`, 30, 180);
+        sCtx.font = '10px "Press Start 2P"';
+        sCtx.fillStyle = '#aaaaaa';
+        sCtx.fillText(`PLAYER: ${playerHandle || '@Player'}`, 30, 100);
+        sCtx.fillText(`TOKEN: $ODACUIR`, 30, 135);
+        sCtx.fillText(`STREAK: ${streak}/30 DAYS`, 30, 170);
+        sCtx.fillText(`STATUS: ${isCooldownActive() ? 'HAPPY & FED' : 'HUNGRY'}`, 30, 205);
 
-      sCtx.font = '8px "Press Start 2P"';
-      sCtx.fillText(`TIME: ${new Date().toISOString().slice(0, 10)}`, 30, 230);
-
-      sCtx.fillStyle = '#666666';
-      sCtx.fillText('0 TOKEN CONSUMPTION - 30D AIRDROP (3 SLOTS/MO)', 30, 350);
-
-      const dataUrl = shareCanvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.download = `ODACUIR_DAY_${streak}.png`;
-      link.href = dataUrl;
-      link.click();
-    }
-  </script>
-</body>
-</html>
+        sCtx.
