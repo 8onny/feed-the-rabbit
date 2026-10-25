@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>8-BIT RABBIT PET</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Pixel Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        * {
+            font-family: 'Press Start 2P', monospace, cursive;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Pixel Crispness */
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        /* Monochromatic CRT Scanline Effect */
+        .crt::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.4) 50%);
+            z-index: 20;
+            background-size: 100% 4px;
+            pointer-events: none;
+        }
+
+        /* 8-bit Pixel Border Styles (Black & White) */
+        .pixel-box {
+            border: 4px solid #000000;
+            box-shadow: -4px 0 #000000, 4px 0 #000000, 0 -4px #000000, 0 4px #000000;
+        }
+
+        .pixel-btn {
+            position: relative;
+            display: inline-block;
+            border: 4px solid #000000;
+            box-shadow: inset -4px -4px 0px 0px #555555, inset 4px 4px 0px 0px #ffffff;
+            transition: transform 0.05s;
+        }
+
+        .pixel-btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: inset -2px -2px 0px 0px #555555, inset 2px 2px 0px 0px #ffffff;
+        }
+
+        /* Dithered pattern helper for retro feel */
+        .bg-dither {
+            background-color: #ffffff;
+            background-image: radial-gradient(#000000 15%, transparent 16%);
+            background-size: 4px 4px;
+        }
+    </style>
+</head>
+<body class="bg-black text-black min-h-screen flex flex-col items-center justify-center p-2 sm:p-4 select-none">
+
+    <!-- Main Outer Container -->
+    <div id="game-frame" class="relative w-full max-w-md bg-white pixel-box crt p-4 sm:p-6 flex flex-col items-center gap-4 rounded-none my-auto border-4 border-black">
+        
+        <!-- Header -->
+        <div class="w-full flex justify-between items-center text-[10px] sm:text-xs bg-black text-white p-2">
+            <div class="flex items-center gap-2">
+                <span class="inline-block w-2 h-2 bg-white animate-pulse"></span>
+                <span>OCADUIR Feed the Rabbit</span>
+            </div>
+        </div>
+
+        <!-- Dialogue / Status Log Box -->
+        <div class="w-full bg-white text-black p-3 text-[10px] sm:text-xs border-4 border-black text-center min-h-[48px] flex items-center justify-center">
+            <p id="dialogue-text" class="leading-relaxed">STATUS: SAD (HUNGRY...)</p>
+        </div>
+
+        <!-- Main Game Canvas -->
+        <div class="relative w-full aspect-square bg-white border-4 border-black flex items-center justify-center overflow-hidden">
+            <canvas id="gameCanvas" width="256" height="256" class="w-full h-full object-contain"></canvas>
+
+            <!-- 7-Day Completion Overlay -->
+            <div id="celebration-overlay" class="hidden absolute inset-0 bg-black text-white flex flex-col items-center justify-center p-4 text-center z-30">
+                <div class="text-xs sm:text-sm mb-3 animate-bounce">7-DAY STREAK COMPLETED!</div>
+                <div class="text-[9px] sm:text-[10px] mb-5 leading-relaxed">YOU ARE THE ULTIMATE RABBIT MASTER!</div>
+                <button id="close-celebration" class="pixel-btn bg-white text-black px-4 py-2 text-xs hover:bg-gray-200">CONTINUE</button>
+            </div>
+        </div>
+
+        <!-- 7-Day Streak Tracker -->
+        <div class="w-full bg-black text-white p-3 border-4 border-black flex flex-col items-center gap-2">
+            <div class="w-full flex justify-between items-center text-[9px] sm:text-[10px]">
+                <span>FEEDING STREAK:</span>
+                <span id="streak-count-text">0 / 7 DAYS</span>
+            </div>
+            <!-- 7 Day Boxes -->
+            <div class="grid grid-cols-7 gap-1 sm:gap-2 w-full" id="streak-boxes">
+                <!-- Javascript will inject 7 boxes here -->
+            </div>
+        </div>
+
+        <!-- Feeding Action Button -->
+        <button id="btn-feed" class="w-full pixel-btn bg-black hover:bg-gray-800 text-white p-3 sm:p-4 text-xs sm:text-sm flex items-center justify-center gap-2">
+            <span>🪙</span>
+            <span>GIVE COIN</span>
+        </button>
+
+    </div>
+
+    <!-- Retro Chiptune Audio Synth (Web Audio API) -->
+    <script>
+        class ChiptuneAudio {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+            }
+
+            playTone(freq, type, duration, vol = 0.1) {
+                if (this.muted) return;
+                this.init();
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = type; // 'square', 'sawtooth', 'triangle', 'sine'
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+                gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            }
+
+            playClick() {
+                this.playTone(300, 'square', 0.04, 0.08);
+            }
+
+            playEat() {
+                if (this.muted) return;
+                this.init();
+                [150, 220, 290, 200].forEach((freq, idx) => {
+                    setTimeout(() => {
+                        this.playTone(freq, 'square', 0.06, 0.1);
+                    }, idx * 60);
+                });
+            }
+
+            playHappy() {
+                if (this.muted) return;
+                this.init();
+                [523.25, 659.25, 783.99].forEach((freq, idx) => {
+                    setTimeout(() => {
+                        this.playTone(freq, 'triangle', 0.08, 0.1);
+                    }, idx * 70);
+                });
+            }
+
+            playFanfare() {
+                if (this.muted) return;
+                this.init();
+                const notes = [
+                    {f: 440.00, d: 0.12},
+                    {f: 554.37, d: 0.12},
+                    {f: 659.25, d: 0.12},
+                    {f: 880.00, d: 0.35}
+                ];
+                let delay = 0;
+                notes.forEach(note => {
+                    setTimeout(() => {
+                        this.playTone(note.f, 'square', note.d, 0.12);
+                    }, delay);
+                    delay += note.d * 1000;
+                });
+            }
+        }
+
+        const sfx = new ChiptuneAudio();
+    </script>
+
+    <!-- Core Game Logic -->
+    <script>
+        // --- State Management ---
+        const DEFAULT_STATE = {
+            streak: 0,
+            fedToday: false,
+            lastFedDate: null, // Stores YYYY-MM-DD
+            hasCrown: false
+        };
+
+        let gameState = { ...DEFAULT_STATE };
+
+        // Canvas Setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+
+        // Visual Variables
+        let bunnyState = 'SAD'; // 'SAD', 'EATING', 'HAPPY'
+        let animFrame = 0;
+        let animTimer = 0;
+        let particles = [];
+        let foodAnimation = null;
+
+        // Monochrome Color Palette
+        const BLACK = '#000000';
+        const WHITE = '#ffffff';
+        const GRAY = '#777777';
+
+        // Draw Room / Background Grid Pattern
+        function drawBackground() {
+            // Fill background completely black with no floor line or pattern
+            ctx.fillStyle = BLACK;
+            ctx.fillRect(0, 0, 256, 256);
+        }
+
+        // Render Monochromatic Pixel Rabbit (Matching Reference Image Exact Silhouette)
+        function drawRabbit(centerX, bottomY, frame, state) {
+            const scale = 4;
+            let bounceY = 0;
+
+            if (state === 'HAPPY') {
+                bounceY = (frame % 2 === 0) ? -12 : 0;
+            } else if (state === 'EATING') {
+                bounceY = (frame % 2 === 0) ? -4 : 0;
+            }
+
+            // Grid offsets based on reference image geometry
+            // Total width base: 32 units wide (-16 to +16)
+            // Head width: 24 units wide (-12 to +12)
+            // Ears width: 4 units each, inner gray horizontal stripes
+            const x = centerX;
+            const y = bottomY + bounceY / scale;
+
+            // --- 1. BASE BODY (Wider Bottom Tier) ---
+            ctx.fillStyle = WHITE;
+            ctx.fillRect((x - 16) * scale, (y - 18) * scale, 32 * scale, 18 * scale);
+
+            // --- 2. HEAD (Middle Tier) ---
+            ctx.fillRect((x - 12) * scale, (y - 36) * scale, 24 * scale, 18 * scale);
+
+            // --- 3. EARS (Top Tier - Slightly Shorter Height) ---
+            // Left Ear Outer (White)
+            ctx.fillRect((x - 8) * scale, (y - 50) * scale, 5 * scale, 14 * scale);
+            // Right Ear Outer (White)
+            ctx.fillRect((x + 3) * scale, (y - 50) * scale, 5 * scale, 14 * scale);
+
+            // Inner Ear (Solid Gray Fill)
+            ctx.fillStyle = GRAY;
+            // Left ear inner solid block
+            ctx.fillRect((x - 7) * scale, (y - 48) * scale, 3 * scale, 10 * scale);
+            // Right ear inner solid block
+            ctx.fillRect((x + 4) * scale, (y - 48) * scale, 3 * scale, 10 * scale);
+
+            // --- 4. EYES (Square Black) ---
+            ctx.fillStyle = BLACK;
+            if (state === 'HAPPY') {
+                // Happy Arc Eyes (^ ^)
+                ctx.fillRect((x - 8) * scale, (y - 28) * scale, 4 * scale, 2 * scale);
+                ctx.fillRect((x - 8) * scale, (y - 26) * scale, 1 * scale, 2 * scale);
+                ctx.fillRect((x - 5) * scale, (y - 26) * scale, 1 * scale, 2 * scale);
+
+                ctx.fillRect((x + 4) * scale, (y - 28) * scale, 4 * scale, 2 * scale);
+                ctx.fillRect((x + 4) * scale, (y - 26) * scale, 1 * scale, 2 * scale);
+                ctx.fillRect((x + 7) * scale, (y - 26) * scale, 1 * scale, 2 * scale);
+            } else {
+                // Solid Black Square Eyes (Exact match to reference)
+                ctx.fillRect((x - 8) * scale, (y - 28) * scale, 4 * scale, 4 * scale);
+                ctx.fillRect((x + 4) * scale, (y - 28) * scale, 4 * scale, 4 * scale);
+            }
+
+            // --- 5. MOUTH ---
+            if (state === 'SAD') {
+                // Droopy / Small mouth
+                if (frame % 2 === 0) {
+                    ctx.fillRect((x - 2) * scale, (y - 18) * scale, 4 * scale, 1 * scale);
+                } else {
+                    ctx.fillRect((x - 3) * scale, (y - 17) * scale, 6 * scale, 1 * scale);
+                }
+                // Small Tear Drop in SAD state
+                if (frame % 2 === 0) {
+                    ctx.fillStyle = BLACK;
+                    ctx.fillRect((x - 10) * scale, (y - 22) * scale, 1 * scale, 2 * scale);
+                }
+            } else if (state === 'HAPPY') {
+                // Smiling / Open Happy Mouth
+                ctx.fillRect((x - 3) * scale, (y - 18) * scale, 6 * scale, 2 * scale);
+                ctx.fillRect((x - 2) * scale, (y - 16) * scale, 4 * scale, 1 * scale);
+            } else if (state === 'EATING') {
+                // Munching Mouth
+                if (frame % 2 === 0) {
+                    ctx.fillRect((x - 2) * scale, (y - 19) * scale, 4 * scale, 3 * scale);
+                } else {
+                    ctx.fillRect((x - 3) * scale, (y - 18) * scale, 6 * scale, 1 * scale);
+                }
+            }
+
+            // --- 6. CROWN (IF DAY 7 COMPLETED) ---
+            if (gameState.hasCrown) {
+                const cx = x - 7;
+                const cy = y - 57;
+                ctx.fillStyle = WHITE;
+                ctx.fillRect(cx * scale, cy * scale, 14 * scale, 6 * scale);
+                ctx.fillRect((cx - 1) * scale, (cy - 4) * scale, 3 * scale, 4 * scale);
+                ctx.fillRect((cx + 5.5) * scale, (cy - 5) * scale, 3 * scale, 5 * scale);
+                ctx.fillRect((cx + 12) * scale, (cy - 4) * scale, 3 * scale, 4 * scale);
+
+                ctx.fillStyle = BLACK;
+                ctx.fillRect((cx + 6) * scale, (cy + 2) * scale, 2 * scale, 2 * scale);
+            }
+        }
+
+        // Draw Coin
+        function drawCoin(x, y, scale = 3) {
+            // Outer Coin Circle (White)
+            ctx.fillStyle = WHITE;
+            ctx.fillRect(x + 3 * scale, y, 6 * scale, 12 * scale);
+            ctx.fillRect(x + 1 * scale, y + 1 * scale, 10 * scale, 10 * scale);
+            ctx.fillRect(x, y + 3 * scale, 12 * scale, 6 * scale);
+
+            // Coin Inner Rim (Black Outline)
+            ctx.fillStyle = BLACK;
+            ctx.fillRect(x + 3 * scale, y + 1 * scale, 6 * scale, 1 * scale);
+            ctx.fillRect(x + 3 * scale, y + 10 * scale, 6 * scale, 1 * scale);
+            ctx.fillRect(x + 1 * scale, y + 3 * scale, 1 * scale, 6 * scale);
+            ctx.fillRect(x + 10 * scale, y + 3 * scale, 1 * scale, 6 * scale);
+
+            // Center Symbol / Detail ($ or coin mark)
+            ctx.fillRect(x + 5 * scale, y + 3 * scale, 2 * scale, 6 * scale);
+            ctx.fillRect(x + 4 * scale, y + 4 * scale, 4 * scale, 1 * scale);
+            ctx.fillRect(x + 4 * scale, y + 7 * scale, 4 * scale, 1 * scale);
+        }
+
+        // Heart Particles for HAPPY State
+        function createHeartParticle(x, y) {
+            particles.push({
+                x: x + (Math.random() * 40 - 20),
+                y: y,
+                vy: -1.2 - Math.random(),
+                life: 30
+            });
+        }
+
+        function updateAndDrawParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.y += p.vy;
+                p.life--;
+
+                ctx.fillStyle = WHITE;
+                // Monochromatic Heart Shape
+                ctx.fillRect(p.x, p.y, 6, 6);
+                ctx.fillRect(p.x - 3, p.y - 3, 3, 3);
+                ctx.fillRect(p.x + 6, p.y - 3, 3, 3);
+
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        // Render Loop
+        function render() {
+            animTimer++;
+            if (animTimer % 14 === 0) {
+                animFrame++;
+            }
+
+            // 1. Clear & Draw Background
+            drawBackground();
+
+            // 2. Draw Flying Coin Animation
+            if (foodAnimation && foodAnimation.active) {
+                foodAnimation.x += (foodAnimation.targetX - foodAnimation.x) * 0.18;
+                foodAnimation.y += (foodAnimation.targetY - foodAnimation.y) * 0.18;
+
+                drawCoin(foodAnimation.x, foodAnimation.y);
+
+                const dist = Math.hypot(foodAnimation.targetX - foodAnimation.x, foodAnimation.targetY - foodAnimation.y);
+                if (dist < 10) {
+                    foodAnimation.active = false;
+                    bunnyState = 'EATING';
+                    sfx.playEat();
+
+                    setTimeout(() => {
+                        bunnyState = 'HAPPY';
+                        sfx.playHappy();
+                        for (let k = 0; k < 5; k++) {
+                            createHeartParticle(128, 110);
+                        }
+                    }, 1000);
+                }
+            }
+
+            // 3. Draw Rabbit Character (Centered on Grid)
+            drawRabbit(32, 54, animFrame, bunnyState);
+
+            // 4. Draw Particles
+            updateAndDrawParticles();
+
+            requestAnimationFrame(render);
+        }
+
+        // --- Game Actions ---
+
+        function updateUI() {
+            // Update Dialogue Text
+            const dialogueText = document.getElementById('dialogue-text');
+            if (gameState.fedToday || bunnyState === 'HAPPY') {
+                dialogueText.innerText = "STATUS: HAPPY (FULL & LOVED!)";
+            } else {
+                dialogueText.innerText = "STATUS: SAD (HUNGRY...)";
+            }
+
+            // Update Streak Count Text
+            document.getElementById('streak-count-text').innerText = `${gameState.streak} / 7 DAYS`;
+
+            // Render 7-Day Tracker Boxes
+            const streakContainer = document.getElementById('streak-boxes');
+            streakContainer.innerHTML = '';
+
+            for (let day = 1; day <= 7; day++) {
+                const box = document.createElement('div');
+                box.className = 'aspect-square border-2 border-white flex flex-col items-center justify-center p-1 relative text-[8px] sm:text-[9px] ';
+
+                if (day <= gameState.streak) {
+                    // Completed Day
+                    box.className += 'bg-white text-black font-bold';
+                    box.innerHTML = `<span>D${day}</span><span class="text-xs">🪙</span>`;
+                } else {
+                    // Empty / Future Day
+                    box.className += 'bg-black text-gray-400';
+                    box.innerHTML = `<span>D${day}</span><span class="opacity-20">X</span>`;
+                }
+                streakContainer.appendChild(box);
+            }
+
+            saveData();
+        }
+
+        function getTodayString() {
+            const today = new Date();
+            return `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
+        }
+
+        // Feed Action
+        function handleFeed() {
+            sfx.playClick();
+
+            if (foodAnimation && foodAnimation.active) return; // Prevent double trigger
+
+            const todayStr = getTodayString();
+
+            if (!gameState.fedToday) {
+                gameState.fedToday = true;
+                if (gameState.streak < 7) {
+                    gameState.streak += 1;
+                }
+                gameState.lastFedDate = todayStr;
+
+                if (gameState.streak === 7 && !gameState.hasCrown) {
+                    gameState.hasCrown = true;
+                    sfx.playFanfare();
+                    document.getElementById('celebration-overlay').classList.remove('hidden');
+                }
+            }
+
+            // Start Feeding Animation
+            foodAnimation = {
+                x: 20,
+                y: 40,
+                targetX: 116,
+                targetY: 155,
+                active: true
+            };
+
+            updateUI();
+        }
+
+        // Next Day Simulation Action
+        function handleNextDay() {
+            sfx.playClick();
+
+            // Reset fed status for the new day
+            gameState.fedToday = false;
+            bunnyState = 'SAD';
+
+            updateUI();
+        }
+
+        // Reset Streak Action
+        function handleReset() {
+            sfx.playClick();
+            gameState = { ...DEFAULT_STATE };
+            bunnyState = 'SAD';
+            localStorage.removeItem('pixel_bunny_mono_save');
+            updateUI();
+        }
+
+        // Storage
+        function saveData() {
+            localStorage.setItem('pixel_bunny_mono_save', JSON.stringify(gameState));
+        }
+
+        function loadData() {
+            const saved = localStorage.getItem('pixel_bunny_mono_save');
+            if (saved) {
+                try {
+                    gameState = { ...DEFAULT_STATE, ...JSON.parse(saved) };
+                    bunnyState = gameState.fedToday ? 'HAPPY' : 'SAD';
+                } catch (e) {
+                    console.error("Save load failed", e);
+                }
+            }
+        }
+
+        // Initialization
+        window.onload = function() {
+            loadData();
+
+            // Bind Control Buttons
+            document.getElementById('btn-feed').addEventListener('click', handleFeed);
+
+            // Close Celebration Overlay
+            document.getElementById('close-celebration').addEventListener('click', () => {
+                document.getElementById('celebration-overlay').classList.add('hidden');
+            });
+
+            updateUI();
+            render(); // Start main animation loop
+        };
+    </script>
+</body>
+</html>
