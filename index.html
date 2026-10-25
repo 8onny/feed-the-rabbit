@@ -234,6 +234,7 @@
     </header>
 
     <div class="status-bar">
+      <!-- 修改為 7D -->
       <span>STREAK: <span id="streak-count">0</span>/7D</span>
       <span>STATUS: <span id="pet-status">SAD</span></span>
     </div>
@@ -245,4 +246,78 @@
     <div class="controls">
       <button id="feed-btn" onclick="tryFeed()">[ FEED PET ]</button>
       
-      <button id="airdrop-claim-btn" class="airdrop-btn hidden" onclick="open
+      <button id="airdrop-claim-btn" class="airdrop-btn hidden" onclick="openAirdropModal()">
+        [ 🎉 CLAIM $5 AIRDROP ]
+      </button>
+
+      <button id="share-btn" onclick="generateAndShowCard()">[ SHARE CARD ]</button>
+      <button onclick="openConfigModal()">[ CONFIG PLAYER ]</button>
+    </div>
+
+    <!-- 點擊 SHARE CARD 後在頁面下方直接顯示 -->
+    <div id="card-output-section" class="hidden">
+      <div style="font-size: 7px; margin-bottom: 4px;">=== GENERATED CARD ===</div>
+      <div style="font-size: 6px; color: var(--text-dim);">Long press to Save / Copy Image:</div>
+      <img id="share-card-img" src="" alt="Share Card">
+    </div>
+  </div>
+
+  <!-- Config Modal -->
+  <div id="config-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-title">=== GAME RULES ===</div>
+      <div class="info-text">
+        1. Feed the bunny once every day, or it will be very sad.<br>
+        2. Today is Day <span id="modal-day-count" style="text-decoration: underline;">1</span> of your feeding streak.<br>
+        <!-- 修改說明文案 -->
+        3. 🎁 <b>Reach a 7-day streak to unlock a random ODACUIR memecoin airdrop worth $5 USDC! (Limited to 3 slots/month)</b><br>
+        4. Holding proof screenshot is required when claiming the 7-day airdrop.
+      </div>
+      
+      <div class="warning-text">
+        ⚠️ This game consumes ZERO real tokens. It is purely for 8-bit entertainment and reward purposes.
+      </div>
+
+      <form id="config-form" onsubmit="saveConfig(event)">
+        <div>
+          <label>PLAYER HANDLE (TG):</label>
+          <input type="text" id="input-handle" placeholder="@username" value="@Player" required>
+          <button type="button" onclick="detectTGUser(true)" style="font-size:6px; padding:6px; margin-bottom:8px; width:100%;">[ 🔄 DETECT TG HANDLE ]</button>
+        </div>
+
+        <button type="submit" style="width: 100%; margin-top: 8px;">[ SAVE & START ]</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 7-Day Airdrop Claim Modal -->
+  <div id="airdrop-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <!-- 修改標題與內容 -->
+      <div class="modal-title">🎉 7-DAY STREAK REACHED!</div>
+      <div class="info-text">
+        Congratulations! You have taken care of the ODACUIR bunny for 7 consecutive days!<br><br>
+        You are now eligible to claim a <b>random ODACUIR series memecoin worth $5 USDC</b>!<br>
+        <i>*Monthly Limit: 3 Slots (First-Come, First-Served)</i>
+      </div>
+
+      <div class="warning-text">
+        * Please submit your Solana wallet address and provide holding proof screenshot in the claim form.
+      </div>
+
+      <form onsubmit="submitAirdropClaim(event)">
+        <div>
+          <label>SOLANA RECEIVE WALLET:</label>
+          <input type="text" id="airdrop-wallet" placeholder="Enter Solana Wallet Address" required>
+        </div>
+
+        <button type="submit" style="width: 100%; margin-top: 8px;">[ GO TO CLAIM FORM ]</button>
+        <button type="button" onclick="closeAirdropModal()" style="width: 100%; margin-top: 4px; background:#333;">[ CLOSE ]</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/YOUR_FORM_ID/viewform";
+
+    let streak = parseInt(localStorage
