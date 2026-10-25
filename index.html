@@ -141,7 +141,6 @@
       to { opacity: 0.6; }
     }
 
-    /* 頁面內展示圖卡的區域 */
     #card-output-section {
       width: 100%;
       margin-top: 10px;
@@ -234,7 +233,6 @@
     </header>
 
     <div class="status-bar">
-      <!-- 修改為 7D -->
       <span>STREAK: <span id="streak-count">0</span>/7D</span>
       <span>STATUS: <span id="pet-status">SAD</span></span>
     </div>
@@ -254,7 +252,6 @@
       <button onclick="openConfigModal()">[ CONFIG PLAYER ]</button>
     </div>
 
-    <!-- 點擊 SHARE CARD 後在頁面下方直接顯示 -->
     <div id="card-output-section" class="hidden">
       <div style="font-size: 7px; margin-bottom: 4px;">=== GENERATED CARD ===</div>
       <div style="font-size: 6px; color: var(--text-dim);">Long press to Save / Copy Image:</div>
@@ -269,7 +266,6 @@
       <div class="info-text">
         1. Feed the bunny once every day, or it will be very sad.<br>
         2. Today is Day <span id="modal-day-count" style="text-decoration: underline;">1</span> of your feeding streak.<br>
-        <!-- 修改說明文案 -->
         3. 🎁 <b>Reach a 7-day streak to unlock a random ODACUIR memecoin airdrop worth $5 USDC! (Limited to 3 slots/month)</b><br>
         4. Holding proof screenshot is required when claiming the 7-day airdrop.
       </div>
@@ -293,7 +289,6 @@
   <!-- 7-Day Airdrop Claim Modal -->
   <div id="airdrop-modal" class="modal-overlay hidden">
     <div class="modal-content">
-      <!-- 修改標題與內容 -->
       <div class="modal-title">🎉 7-DAY STREAK REACHED!</div>
       <div class="info-text">
         Congratulations! You have taken care of the ODACUIR bunny for 7 consecutive days!<br><br>
@@ -320,4 +315,140 @@
   <script>
     const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/YOUR_FORM_ID/viewform";
 
-    let streak = parseInt(localStorage
+    // GLOBAL VARIABLES & STATE DECLARATIONS
+    let streak = parseInt(localStorage.getItem('odacuir_streak') || '0');
+    let lastFedTimestamp = parseInt(localStorage.getItem('odacuir_last_fed') || '0');
+    let playerHandle = localStorage.getItem('odacuir_handle') || '';
+    let animFrame = 0;
+    let isEating = false; // Declared explicitly to prevent loop crashes
+
+    function showNotification(msg) {
+      const tg = window.Telegram?.WebApp;
+      if (tg && tg.showAlert) {
+        tg.showAlert(msg);
+      } else {
+        alert(msg);
+      }
+    }
+
+    function detectTGUser(isManualClick = false) {
+      try {
+        const tg = window.Telegram?.WebApp;
+        if (tg) {
+          tg.ready();
+          tg.expand();
+          const user = tg.initDataUnsafe?.user;
+          if (user) {
+            playerHandle = user.username ? `@${user.username}` : `${user.first_name || 'Player'}`;
+            document.getElementById('input-handle').value = playerHandle;
+            localStorage.setItem('odacuir_handle', playerHandle);
+            if (isManualClick) showNotification(`Detected TG Handle: ${playerHandle}`);
+            return true;
+          }
+        }
+      } catch (e) {
+        console.log("TG Detection error:", e);
+      }
+      
+      if (!playerHandle) playerHandle = "@Player";
+      document.getElementById('input-handle').value = playerHandle;
+      if (isManualClick) showNotification("Outside Telegram or no Username found. You can set it manually!");
+      return false;
+    }
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playBeep(freq, type = 'square', duration = 0.15) {
+      try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch(e) {}
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      if (!playerHandle) {
+        detectTGUser(false);
+      } else {
+        document.getElementById('input-handle').value = playerHandle;
+      }
+      
+      checkCooldown();
+      updateUI();
+      
+      if (localStorage.getItem('odacuir_handle')) {
+        closeConfigModal();
+      } else {
+        openConfigModal();
+      }
+    });
+
+    function openConfigModal() {
+      document.getElementById('modal-day-count').innerText = streak + 1;
+      document.getElementById('config-modal').classList.remove('hidden');
+    }
+
+    function closeConfigModal() {
+      document.getElementById('config-modal').classList.add('hidden');
+    }
+
+    function openAirdropModal() {
+      document.getElementById('airdrop-modal').classList.remove('hidden');
+    }
+
+    function closeAirdropModal() {
+      document.getElementById('airdrop-modal').classList.add('hidden');
+    }
+
+    function saveConfig(e) {
+      e.preventDefault();
+      playerHandle = document.getElementById('input-handle').value.trim() || '@Player';
+      localStorage.setItem('odacuir_handle', playerHandle);
+
+      playBeep(440);
+      closeConfigModal();
+      updateUI();
+    }
+
+    function isCooldownActive() {
+      const now = Date.now();
+      return (now - lastFedTimestamp) < (24 * 60 * 60 * 1000);
+    }
+
+    function checkCooldown() {
+      const feedBtn = document.getElementById('feed-btn');
+      if (isCooldownActive()) {
+        feedBtn.disabled = true;
+        feedBtn.innerText = "[ ALREADY FED ]";
+      } else {
+        feedBtn.disabled = false;
+        feedBtn.innerText = "[ FEED PET ]";
+      }
+    }
+
+    function tryFeed() {
+      if (isCooldownActive()) return;
+
+      streak += 1;
+      lastFedTimestamp = Date.now();
+
+      localStorage.setItem('odacuir_streak', streak);
+      localStorage.setItem('odacuir_last_fed', lastFedTimestamp);
+
+      playBeep(587, 'square', 0.1);
+      setTimeout(() => playBeep(880, 'square', 0.2), 120);
+
+      checkCooldown();
+      updateUI();
+      triggerEatAnimation();
+    }
+
+    function updateUI() {
+      document.getElementById('streak-count
