@@ -35,7 +35,7 @@
       align-items: center;
       justify-content: center;
       min-height: 100vh;
-      overflow: hidden;
+      overflow-y: auto;
       filter: grayscale(100%) contrast(150%);
     }
 
@@ -141,6 +141,24 @@
       to { opacity: 0.6; }
     }
 
+    /* 頁面內展示圖卡的區域 */
+    #card-output-section {
+      width: 100%;
+      margin-top: 10px;
+      border: 2px dashed var(--border-color);
+      padding: 10px;
+      background-color: var(--panel-bg);
+      text-align: center;
+    }
+
+    #share-card-img {
+      width: 100%;
+      height: auto;
+      border: 2px solid var(--border-color);
+      margin-top: 8px;
+      display: block;
+    }
+
     .modal-overlay {
       position: fixed;
       top: 0; left: 0; width: 100%; height: 100%;
@@ -227,323 +245,4 @@
     <div class="controls">
       <button id="feed-btn" onclick="tryFeed()">[ FEED PET ]</button>
       
-      <button id="airdrop-claim-btn" class="airdrop-btn hidden" onclick="openAirdropModal()">
-        [ 🎉 CLAIM $5 AIRDROP ]
-      </button>
-
-      <button id="share-btn" onclick="generateAndShareCard()">[ SHARE CARD ]</button>
-      <button onclick="openConfigModal()">[ CONFIG PLAYER ]</button>
-    </div>
-  </div>
-
-  <!-- Config Modal -->
-  <div id="config-modal" class="modal-overlay">
-    <div class="modal-content">
-      <div class="modal-title">=== GAME RULES ===</div>
-      <div class="info-text">
-        1. Feed the bunny once every day, or it will be very sad.<br>
-        2. Today is Day <span id="modal-day-count" style="text-decoration: underline;">1</span> of your feeding streak.<br>
-        3. 🎁 <b>Reach a 30-day streak to unlock a random ODACUIR memecoin airdrop worth $5 USDC! (Limited to 3 slots/month)</b><br>
-        4. Holding proof screenshot is required when claiming the 30-day airdrop.
-      </div>
-      
-      <div class="warning-text">
-        ⚠️ This game consumes ZERO real tokens. It is purely for 8-bit entertainment and reward purposes.
-      </div>
-
-      <form id="config-form" onsubmit="saveConfig(event)">
-        <div>
-          <label>PLAYER HANDLE (TG):</label>
-          <input type="text" id="input-handle" placeholder="@username" value="@Player" required>
-          <button type="button" onclick="detectTGUser(true)" style="font-size:6px; padding:6px; margin-bottom:8px; width:100%;">[ 🔄 DETECT TG HANDLE ]</button>
-        </div>
-
-        <button type="submit" style="width: 100%; margin-top: 8px;">[ SAVE & START ]</button>
-      </form>
-    </div>
-  </div>
-
-  <!-- 30-Day Airdrop Claim Modal -->
-  <div id="airdrop-modal" class="modal-overlay hidden">
-    <div class="modal-content">
-      <div class="modal-title">🎉 30-DAY STREAK REACHED!</div>
-      <div class="info-text">
-        Congratulations! You have taken care of the ODACUIR bunny for 30 consecutive days!<br><br>
-        You are now eligible to claim a <b>random ODACUIR series memecoin worth $5 USDC</b>!<br>
-        <i>*Monthly Limit: 3 Slots (First-Come, First-Served)</i>
-      </div>
-
-      <div class="warning-text">
-        * Please submit your Solana wallet address and provide holding proof screenshot in the claim form.
-      </div>
-
-      <form onsubmit="submitAirdropClaim(event)">
-        <div>
-          <label>SOLANA RECEIVE WALLET:</label>
-          <input type="text" id="airdrop-wallet" placeholder="Enter Solana Wallet Address" required>
-        </div>
-
-        <button type="submit" style="width: 100%; margin-top: 8px;">[ GO TO CLAIM FORM ]</button>
-        <button type="button" onclick="closeAirdropModal()" style="width: 100%; margin-top: 4px; background:#333;">[ CLOSE ]</button>
-      </form>
-    </div>
-  </div>
-
-  <script>
-    // 替換為您的 Google Form 連結
-    const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/YOUR_FORM_ID/viewform";
-
-    let streak = parseInt(localStorage.getItem('odacuir_streak') || '0');
-    let lastFedTimestamp = parseInt(localStorage.getItem('odacuir_last_fed') || '0');
-    let playerHandle = localStorage.getItem('odacuir_handle') || '';
-
-    function showNotification(msg) {
-      const tg = window.Telegram?.WebApp;
-      if (tg && tg.showAlert) {
-        tg.showAlert(msg);
-      } else {
-        alert(msg);
-      }
-    }
-
-    function detectTGUser(isManualClick = false) {
-      try {
-        const tg = window.Telegram?.WebApp;
-        if (tg) {
-          tg.ready();
-          tg.expand();
-          const user = tg.initDataUnsafe?.user;
-          if (user) {
-            playerHandle = user.username ? `@${user.username}` : `${user.first_name || 'Player'}`;
-            document.getElementById('input-handle').value = playerHandle;
-            localStorage.setItem('odacuir_handle', playerHandle);
-            if (isManualClick) showNotification(`Detected TG Handle: ${playerHandle}`);
-            return true;
-          }
-        }
-      } catch (e) {
-        console.log("TG Detection error:", e);
-      }
-      
-      if (!playerHandle) playerHandle = "@Player";
-      document.getElementById('input-handle').value = playerHandle;
-      if (isManualClick) showNotification("Outside Telegram or no Username found. You can set it manually!");
-      return false;
-    }
-
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    function playBeep(freq, type = 'square', duration = 0.15) {
-      try {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + duration);
-      } catch(e) {}
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      if (!playerHandle) {
-        detectTGUser(false);
-      } else {
-        document.getElementById('input-handle').value = playerHandle;
-      }
-      
-      checkCooldown();
-      updateUI();
-      
-      if (localStorage.getItem('odacuir_handle')) {
-        closeConfigModal();
-      } else {
-        openConfigModal();
-      }
-    });
-
-    function openConfigModal() {
-      document.getElementById('modal-day-count').innerText = streak + 1;
-      document.getElementById('config-modal').classList.remove('hidden');
-    }
-
-    function closeConfigModal() {
-      document.getElementById('config-modal').classList.add('hidden');
-    }
-
-    function openAirdropModal() {
-      document.getElementById('airdrop-modal').classList.remove('hidden');
-    }
-
-    function closeAirdropModal() {
-      document.getElementById('airdrop-modal').classList.add('hidden');
-    }
-
-    function saveConfig(e) {
-      e.preventDefault();
-      playerHandle = document.getElementById('input-handle').value.trim() || '@Player';
-      localStorage.setItem('odacuir_handle', playerHandle);
-
-      playBeep(440);
-      closeConfigModal();
-      updateUI();
-    }
-
-    function isCooldownActive() {
-      const now = Date.now();
-      return (now - lastFedTimestamp) < (24 * 60 * 60 * 1000);
-    }
-
-    function checkCooldown() {
-      const feedBtn = document.getElementById('feed-btn');
-      if (isCooldownActive()) {
-        feedBtn.disabled = true;
-        feedBtn.innerText = "[ ALREADY FED ]";
-      } else {
-        feedBtn.disabled = false;
-        feedBtn.innerText = "[ FEED PET ]";
-      }
-    }
-
-    function tryFeed() {
-      if (isCooldownActive()) return;
-
-      streak += 1;
-      lastFedTimestamp = Date.now();
-
-      localStorage.setItem('odacuir_streak', streak);
-      localStorage.setItem('odacuir_last_fed', lastFedTimestamp);
-
-      playBeep(587, 'square', 0.1);
-      setTimeout(() => playBeep(880, 'square', 0.2), 120);
-
-      checkCooldown();
-      updateUI();
-      triggerEatAnimation();
-    }
-
-    function updateUI() {
-      document.getElementById('streak-count').innerText = streak;
-      document.getElementById('pet-status').innerText = isCooldownActive() ? "HAPPY" : "SAD";
-
-      const airdropBtn = document.getElementById('airdrop-claim-btn');
-      if (streak >= 30) {
-        airdropBtn.classList.remove('hidden');
-      } else {
-        airdropBtn.classList.add('hidden');
-      }
-    }
-
-    function submitAirdropClaim(e) {
-      e.preventDefault();
-      const wallet = document.getElementById('airdrop-wallet').value.trim();
-      const prefillUrl = `${GOOGLE_FORM_URL}?entry.123456=${encodeURIComponent(playerHandle)}&entry.789012=${encodeURIComponent(wallet)}`;
-      
-      const tg = window.Telegram?.WebApp;
-      if (tg && tg.openLink) {
-        tg.openLink(prefillUrl);
-      } else {
-        window.open(prefillUrl, '_blank');
-      }
-      closeAirdropModal();
-    }
-
-    // Canvas Rendering
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    let animFrame = 0, isEating = false;
-
-    function drawPixelBunny() {
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      const isHappy = isCooldownActive();
-      const bounce = isHappy ? Math.sin(animFrame * 0.1) * 4 : 0;
-      
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
-
-      const WHITE = '#ffffff', GRAY = '#666666', BLACK = '#000000';
-      const cx = 125, cy = 130 + bounce;
-
-      // Ears
-      ctx.fillStyle = WHITE;
-      ctx.fillRect(cx - 35, cy - 80, 20, 50);
-      ctx.fillRect(cx + 15, cy - 80, 20, 50);
-      ctx.fillStyle = GRAY;
-      ctx.fillRect(cx - 30, cy - 75, 10, 40);
-      ctx.fillRect(cx + 20, cy - 75, 10, 40);
-
-      // Body & Head
-      ctx.fillStyle = WHITE;
-      ctx.fillRect(cx - 45, cy - 35, 90, 70);
-      ctx.fillRect(cx - 55, cy + 20, 110, 60);
-
-      // Eyes
-      ctx.fillStyle = BLACK;
-      ctx.fillRect(cx - 25, cy - 15, 12, 12);
-      ctx.fillRect(cx + 13, cy - 15, 12, 12);
-
-      if (!isHappy) {
-        ctx.fillStyle = WHITE;
-        const tearY = cy + (animFrame * 2) % 30;
-        ctx.fillRect(cx - 23, cy + 5 + tearY, 4, 6);
-        ctx.fillRect(cx + 17, cy + 5 + tearY, 4, 6);
-      }
-
-      ctx.fillStyle = BLACK;
-      if (isEating) ctx.fillRect(cx - 10, cy + 5, 20, 15);
-      else if (isHappy) ctx.fillRect(cx - 8, cy + 8, 16, 4);
-      else ctx.fillRect(cx - 8, cy + 12, 16, 3);
-
-      if (isEating) {
-        ctx.fillStyle = WHITE;
-        ctx.fillRect(cx - 10, cy - 40 - bounce, 20, 20);
-        ctx.fillStyle = BLACK;
-        ctx.font = '10px "Press Start 2P"';
-        ctx.fillText('C', cx - 4, cy - 26 - bounce);
-      }
-
-      animFrame++;
-      requestAnimationFrame(drawPixelBunny);
-    }
-
-    function triggerEatAnimation() {
-      isEating = true;
-      setTimeout(() => { isEating = false; }, 1500);
-    }
-
-    drawPixelBunny();
-
-    // 修復後且支援 Telegram 的分享圖卡生成器
-    function generateAndShareCard() {
-      try {
-        const shareCanvas = document.createElement('canvas');
-        shareCanvas.width = 600; 
-        shareCanvas.height = 400;
-        const sCtx = shareCanvas.getContext('2d');
-
-        // 背景與邊框
-        sCtx.fillStyle = '#000000'; 
-        sCtx.fillRect(0, 0, 600, 400);
-        sCtx.strokeStyle = '#ffffff'; 
-        sCtx.lineWidth = 6; 
-        sCtx.strokeRect(10, 10, 580, 380);
-
-        // 文字內容
-        sCtx.fillStyle = '#ffffff';
-        sCtx.font = '16px "Press Start 2P"';
-        sCtx.fillText('ODACUIR FEED ME', 30, 50);
-
-        sCtx.font = '10px "Press Start 2P"';
-        sCtx.fillStyle = '#aaaaaa';
-        sCtx.fillText(`PLAYER: ${playerHandle || '@Player'}`, 30, 100);
-        sCtx.fillText(`TOKEN: $ODACUIR`, 30, 135);
-        sCtx.fillText(`STREAK: ${streak}/30 DAYS`, 30, 170);
-        sCtx.fillText(`STATUS: ${isCooldownActive() ? 'HAPPY & FED' : 'HUNGRY'}`, 30, 205);
-
-        sCtx.
+      <button id="airdrop-claim-btn" class="airdrop-btn hidden" onclick="open
