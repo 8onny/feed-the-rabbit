@@ -254,8 +254,8 @@
       <form id="config-form" onsubmit="saveConfig(event)">
         <div>
           <label>PLAYER HANDLE (TG):</label>
-          <input type="text" id="input-handle" placeholder="@username" required>
-          <button type="button" onclick="detectTGUser()" style="font-size:6px; padding:4px; margin-bottom:8px; width:100%;">[ 🔄 DETECT TG HANDLE ]</button>
+          <input type="text" id="input-handle" placeholder="@username" value="@Player" required>
+          <button type="button" onclick="detectTGUser(true)" style="font-size:6px; padding:6px; margin-bottom:8px; width:100%;">[ 🔄 DETECT TG HANDLE ]</button>
         </div>
 
         <button type="submit" style="width: 100%; margin-top: 8px;">[ SAVE & START ]</button>
@@ -290,8 +290,267 @@
   </div>
 
   <script>
-    const TARGET_CA = "3AkbtbeBp1XJC9VETMENredtYztPMfNT4w7Ej8HEpump";
-    // 請將下方網址替換為您的 Google Form 表單連結
+    // 替換為您的 Google Form 連結
     const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/YOUR_FORM_ID/viewform";
 
-    let streak = parseInt(localStorage.getItem('od
+    let streak = parseInt(localStorage.getItem('odacuir_streak') || '0');
+    let lastFedTimestamp = parseInt(localStorage.getItem('odacuir_last_fed') || '0');
+    let playerHandle = localStorage.getItem('odacuir_handle') || '';
+
+    // 安全提示彈窗函數
+    function showNotification(msg) {
+      const tg = window.Telegram?.WebApp;
+      if (tg && tg.showAlert) {
+        tg.showAlert(msg);
+      } else {
+        alert(msg);
+      }
+    }
+
+    function detectTGUser(isManualClick = false) {
+      try {
+        const tg = window.Telegram?.WebApp;
+        if (tg) {
+          tg.ready();
+          tg.expand();
+          const user = tg.initDataUnsafe?.user;
+          if (user) {
+            playerHandle = user.username ? `@${user.username}` : `${user.first_name || 'Player'}`;
+            document.getElementById('input-handle').value = playerHandle;
+            localStorage.setItem('odacuir_handle', playerHandle);
+            if (isManualClick) showNotification(`Detected TG Handle: ${playerHandle}`);
+            return true;
+          }
+        }
+      } catch (e) {
+        console.log("TG Detection error:", e);
+      }
+      
+      if (!playerHandle) playerHandle = "@Player";
+      document.getElementById('input-handle').value = playerHandle;
+      if (isManualClick) showNotification("Outside Telegram or no Username found. You can set it manually!");
+      return false;
+    }
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playBeep(freq, type = 'square', duration = 0.15) {
+      try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch(e) {}
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      if (!playerHandle) {
+        detectTGUser(false);
+      } else {
+        document.getElementById('input-handle').value = playerHandle;
+      }
+      
+      checkCooldown();
+      updateUI();
+      
+      if (localStorage.getItem('odacuir_handle')) {
+        closeConfigModal();
+      } else {
+        openConfigModal();
+      }
+    });
+
+    function openConfigModal() {
+      document.getElementById('modal-day-count').innerText = streak + 1;
+      document.getElementById('config-modal').classList.remove('hidden');
+    }
+
+    function closeConfigModal() {
+      document.getElementById('config-modal').classList.add('hidden');
+    }
+
+    function openAirdropModal() {
+      document.getElementById('airdrop-modal').classList.remove('hidden');
+    }
+
+    function closeAirdropModal() {
+      document.getElementById('airdrop-modal').classList.add('hidden');
+    }
+
+    function saveConfig(e) {
+      e.preventDefault();
+      playerHandle = document.getElementById('input-handle').value.trim() || '@Player';
+      localStorage.setItem('odacuir_handle', playerHandle);
+
+      playBeep(440);
+      closeConfigModal();
+      updateUI();
+    }
+
+    function isCooldownActive() {
+      const now = Date.now();
+      return (now - lastFedTimestamp) < (24 * 60 * 60 * 1000);
+    }
+
+    function checkCooldown() {
+      const feedBtn = document.getElementById('feed-btn');
+      if (isCooldownActive()) {
+        feedBtn.disabled = true;
+        feedBtn.innerText = "[ ALREADY FED ]";
+      } else {
+        feedBtn.disabled = false;
+        feedBtn.innerText = "[ FEED PET ]";
+      }
+    }
+
+    function tryFeed() {
+      if (isCooldownActive()) return;
+
+      streak += 1;
+      lastFedTimestamp = Date.now();
+
+      localStorage.setItem('odacuir_streak', streak);
+      localStorage.setItem('odacuir_last_fed', lastFedTimestamp);
+
+      playBeep(587, 'square', 0.1);
+      setTimeout(() => playBeep(880, 'square', 0.2), 120);
+
+      checkCooldown();
+      updateUI();
+      triggerEatAnimation();
+    }
+
+    function updateUI() {
+      document.getElementById('streak-count').innerText = streak;
+      document.getElementById('pet-status').innerText = isCooldownActive() ? "HAPPY" : "SAD";
+
+      const airdropBtn = document.getElementById('airdrop-claim-btn');
+      if (streak >= 30) {
+        airdropBtn.classList.remove('hidden');
+      } else {
+        airdropBtn.classList.add('hidden');
+      }
+    }
+
+    function submitAirdropClaim(e) {
+      e.preventDefault();
+      const wallet = document.getElementById('airdrop-wallet').value.trim();
+      const prefillUrl = `${GOOGLE_FORM_URL}?entry.123456=${encodeURIComponent(playerHandle)}&entry.789012=${encodeURIComponent(wallet)}`;
+      
+      const tg = window.Telegram?.WebApp;
+      if (tg && tg.openLink) {
+        tg.openLink(prefillUrl);
+      } else {
+        window.open(prefillUrl, '_blank');
+      }
+      closeAirdropModal();
+    }
+
+    // Canvas Rendering
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    let animFrame = 0, isEating = false;
+
+    function drawPixelBunny() {
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const isHappy = isCooldownActive();
+      const bounce = isHappy ? Math.sin(animFrame * 0.1) * 4 : 0;
+      
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+
+      const WHITE = '#ffffff', GRAY = '#666666', BLACK = '#000000';
+      const cx = 125, cy = 130 + bounce;
+
+      // Ears
+      ctx.fillStyle = WHITE;
+      ctx.fillRect(cx - 35, cy - 80, 20, 50);
+      ctx.fillRect(cx + 15, cy - 80, 20, 50);
+      ctx.fillStyle = GRAY;
+      ctx.fillRect(cx - 30, cy - 75, 10, 40);
+      ctx.fillRect(cx + 20, cy - 75, 10, 40);
+
+      // Body & Head
+      ctx.fillStyle = WHITE;
+      ctx.fillRect(cx - 45, cy - 35, 90, 70);
+      ctx.fillRect(cx - 55, cy + 20, 110, 60);
+
+      // Eyes
+      ctx.fillStyle = BLACK;
+      ctx.fillRect(cx - 25, cy - 15, 12, 12);
+      ctx.fillRect(cx + 13, cy - 15, 12, 12);
+
+      if (!isHappy) {
+        ctx.fillStyle = WHITE;
+        const tearY = cy + (animFrame * 2) % 30;
+        ctx.fillRect(cx - 23, cy + 5 + tearY, 4, 6);
+        ctx.fillRect(cx + 17, cy + 5 + tearY, 4, 6);
+      }
+
+      ctx.fillStyle = BLACK;
+      if (isEating) ctx.fillRect(cx - 10, cy + 5, 20, 15);
+      else if (isHappy) ctx.fillRect(cx - 8, cy + 8, 16, 4);
+      else ctx.fillRect(cx - 8, cy + 12, 16, 3);
+
+      if (isEating) {
+        ctx.fillStyle = WHITE;
+        ctx.fillRect(cx - 10, cy - 40 - bounce, 20, 20);
+        ctx.fillStyle = BLACK;
+        ctx.font = '10px "Press Start 2P"';
+        ctx.fillText('C', cx - 4, cy - 26 - bounce);
+      }
+
+      animFrame++;
+      requestAnimationFrame(drawPixelBunny);
+    }
+
+    function triggerEatAnimation() {
+      isEating = true;
+      setTimeout(() => { isEating = false; }, 1500);
+    }
+
+    drawPixelBunny();
+
+    function generateAndShareCard() {
+      const shareCanvas = document.createElement('canvas');
+      shareCanvas.width = 600; shareCanvas.height = 400;
+      const sCtx = shareCanvas.getContext('2d');
+
+      sCtx.fillStyle = '#000000'; sCtx.fillRect(0, 0, 600, 400);
+      sCtx.strokeStyle = '#ffffff'; sCtx.lineWidth = 6; sCtx.strokeRect(10, 10, 580, 380);
+
+      sCtx.fillStyle = '#ffffff';
+      sCtx.font = '16px "Press Start 2P"';
+      sCtx.fillText('ODACUIR FEED ME', 30, 50);
+
+      sCtx.font = '10px "Press Start 2P"';
+      sCtx.fillStyle = '#aaaaaa';
+      sCtx.fillText(`PLAYER: ${playerHandle}`, 30, 90);
+      sCtx.fillText(`TOKEN: $ODACUIR`, 30, 120);
+      sCtx.fillText(`STREAK: ${streak}/30 DAYS`, 30, 150);
+      sCtx.fillText(`STATUS: ${isCooldownActive() ? 'HAPPY & FED' : 'HUNGRY'}`, 30, 180);
+
+      sCtx.font = '8px "Press Start 2P"';
+      sCtx.fillText(`TIME: ${new Date().toISOString().slice(0, 10)}`, 30, 230);
+
+      sCtx.fillStyle = '#666666';
+      sCtx.fillText('0 TOKEN CONSUMPTION - 30D AIRDROP (3 SLOTS/MO)', 30, 350);
+
+      const dataUrl = shareCanvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `ODACUIR_DAY_${streak}.png`;
+      link.href = dataUrl;
+      link.click();
+    }
+  </script>
+</body>
+</html>
